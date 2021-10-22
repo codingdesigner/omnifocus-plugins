@@ -1,0 +1,104 @@
+// COPY & PASTE into editor app. EDIT & SAVE with “.omnifocusjs” file extension.
+/*{
+	"type": "action",
+	"targets": ["omnifocus"],
+	"author": "Mae Wendell",
+	"identifier": "com.MaeWendell.pushTasks",
+	"version": "1.0",
+	"description": "Push the defer and due dates of selected tasks by one or more days",
+	"label": "Push Tasks",
+	"shortLabel": "Push Tasks"
+}*/
+(() => {
+	var includeDefer = true
+	var dayCount = 1
+	var now = new Date()
+	var today = Calendar.current.startOfDay(now)
+	var dcDue = new DateComponents
+	dcDue.hour = 17
+	var todayDue = Calendar.current.dateByAddingDateComponents(today, dcDue)
+	var dcDefer = new DateComponents
+	dcDefer.hour = 8
+	var todayDefer = Calendar.current.dateByAddingDateComponents(today, dcDefer)
+
+	function updateDate(task, dateField, forceDate = false) {
+		var field
+		var currentDate
+		switch (dateField) {
+		case 'deferDate':
+			field = task['deferDate']
+			currentDate = (field != null) ? field : todayDefer
+			break
+		case 'dueDate':
+			field = task['dueDate']
+			currentDate = (field != null) ? field : todayDue
+			break
+		}
+
+		if (forceDate || field != null) {
+			// var currentDate = (field != null) ? field : today
+			var dcAddDay = new DateComponents
+			dcAddDay.day = dayCount
+			var addDay = Calendar.current.dateByAddingDateComponents(currentDate, dcAddDay)
+			return addDay
+		}
+		return null
+	}
+
+	function updateTask(task, forceDate = false) {
+		if (!task.completed) {
+			if (includeDefer) { task.deferDate = updateDate(task, 'deferDate', forceDate) }
+			task.dueDate = updateDate(task, 'dueDate', forceDate)
+			task.children.forEach(function(child){
+				if (includeDefer) { child.deferDate = updateDate(child, 'deferDate') }
+				child.dueDate = updateDate(child, 'dueDate')
+			})
+		}
+	}
+
+	var action = new PlugIn.Action(function(selection, sender){
+		// action code
+		var inputForm = new Form()
+		var shouldIncludeDefer = new Form.Field.Checkbox(
+			"shouldIncludeDefer",
+			"Apply to defer date",
+			true
+		)
+		var pushDays = new Form.Field.String(
+			"pushDays",
+			"Days to Push",
+			"1",
+			Formatter.decimal
+		)
+		inputForm.addField(shouldIncludeDefer)
+		inputForm.addField(pushDays)
+		var formPrompt = "Number of days to add to project due dates:"
+		var buttonTitle = "OK"
+		var formPromise = inputForm.show(formPrompt, buttonTitle)
+
+		inputForm.validate = function(formObject){
+			if (parseInt(formObject.values["pushDays"]) === NaN) {
+				return false
+			}
+			return true
+		}
+
+		formPromise.then(function(formObject) {
+			includeDefer = parseInt(formObject.values["shouldIncludeDefer"])
+			dayCount = parseInt(formObject.values["pushDays"])
+			// selection options: tasks, projects, folders, tags, allObjects
+			selection.tasks.forEach(function(task){
+				updateTask(task, true)
+			})
+		})
+
+	});
+
+	action.validate = function(selection, sender){
+		// validation code
+		// selection options: tasks, projects, folders, tags, allObjects
+		return (selection.tasks.length > 0)
+	};
+
+	return action;
+})();
